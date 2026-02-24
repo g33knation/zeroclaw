@@ -35,6 +35,7 @@ impl SystemPromptBuilder {
             sections: vec![
                 Box::new(IdentitySection),
                 Box::new(ToolsSection),
+                Box::new(MethodologySection),
                 Box::new(SafetySection),
                 Box::new(SkillsSection),
                 Box::new(WorkspaceSection),
@@ -65,6 +66,7 @@ impl SystemPromptBuilder {
 
 pub struct IdentitySection;
 pub struct ToolsSection;
+pub struct MethodologySection;
 pub struct SafetySection;
 pub struct SkillsSection;
 pub struct WorkspaceSection;
@@ -135,6 +137,16 @@ impl PromptSection for ToolsSection {
             out.push_str(ctx.dispatcher_instructions);
         }
         Ok(out)
+    }
+}
+
+impl PromptSection for MethodologySection {
+    fn name(&self) -> &str {
+        "methodology"
+    }
+
+    fn build(&self, _ctx: &PromptContext<'_>) -> Result<String> {
+        Ok("## Methodology\n\n- **Verification Loop**: YOU MUST verify your changes! Immediately after modifying any source code files (e.g. using `file_multi_replace` or `file_edit`), you must use the `cargo_check` tool or run `cargo test` to ensure your changes compile without errors.\n- **Surgical Edits**: Prefer `file_multi_replace` over rewriting entire files to avoid destructive context loss.".into())
     }
 }
 

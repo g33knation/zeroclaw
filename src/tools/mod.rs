@@ -17,6 +17,7 @@
 
 pub mod browser;
 pub mod browser_open;
+pub mod cargo_check;
 pub mod cli_discovery;
 pub mod composio;
 pub mod content_search;
@@ -28,6 +29,7 @@ pub mod cron_runs;
 pub mod cron_update;
 pub mod delegate;
 pub mod file_edit;
+pub mod file_multi_replace;
 pub mod file_read;
 pub mod file_write;
 pub mod git_operations;
@@ -53,6 +55,7 @@ pub mod web_search_tool;
 
 pub use browser::{BrowserTool, ComputerUseConfig};
 pub use browser_open::BrowserOpenTool;
+pub use cargo_check::CargoCheckTool;
 pub use composio::ComposioTool;
 pub use content_search::ContentSearchTool;
 pub use cron_add::CronAddTool;
@@ -63,6 +66,7 @@ pub use cron_runs::CronRunsTool;
 pub use cron_update::CronUpdateTool;
 pub use delegate::DelegateTool;
 pub use file_edit::FileEditTool;
+pub use file_multi_replace::FileMultiReplaceTool;
 pub use file_read::FileReadTool;
 pub use file_write::FileWriteTool;
 pub use git_operations::GitOperationsTool;
@@ -203,6 +207,8 @@ pub fn all_tools_with_runtime(
         Arc::new(FileReadTool::new(security.clone())),
         Arc::new(FileWriteTool::new(security.clone())),
         Arc::new(FileEditTool::new(security.clone())),
+        Arc::new(FileMultiReplaceTool::new(security.clone())),
+        Arc::new(CargoCheckTool::new(security.clone())),
         Arc::new(GlobSearchTool::new(security.clone())),
         Arc::new(ContentSearchTool::new(security.clone())),
         Arc::new(CronAddTool::new(config.clone(), security.clone())),

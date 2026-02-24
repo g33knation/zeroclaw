@@ -6,6 +6,8 @@
 //! - Pin/alias tables (e.g. `red_led: 13`) for explicit lookup
 //! - Keyword retrieval (default) or semantic search via embeddings (optional)
 
+pub mod codebase;
+
 use crate::memory::chunker;
 use std::collections::HashMap;
 use std::path::Path;

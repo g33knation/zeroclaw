@@ -56,6 +56,8 @@ struct OutgoingFunction {
 #[derive(Debug, Serialize)]
 struct Options {
     temperature: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    num_ctx: Option<u32>,
 }
 
 // ─── Response Structures ──────────────────────────────────────────────────────
@@ -179,7 +181,10 @@ impl OllamaProvider {
             model: model.to_string(),
             messages,
             stream: false,
-            options: Options { temperature },
+            options: Options { 
+                temperature,
+                num_ctx: Some(8192), // Default to 8k context for local models
+            },
             think: self.reasoning_enabled,
             tools: tools.map(|t| t.to_vec()),
         }
@@ -458,7 +463,7 @@ impl OllamaProvider {
 impl Provider for OllamaProvider {
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
-            native_tool_calling: true,
+            native_tool_calling: false,
             vision: true,
         }
     }

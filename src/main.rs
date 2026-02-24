@@ -758,17 +758,20 @@ async fn main() -> Result<()> {
             model,
             temperature,
             peripheral,
-        } => agent::run(
-            config,
-            message,
-            provider,
-            model,
-            temperature,
-            peripheral,
-            true,
-        )
-        .await
-        .map(|_| ()),
+        } => {
+            let interactive = message.is_none();
+            agent::run(
+                config,
+                message,
+                provider,
+                model,
+                temperature,
+                peripheral,
+                interactive,
+            )
+            .await
+            .map(|_| ())
+        }
 
         Commands::Gateway { port, host } => {
             let port = port.unwrap_or(config.gateway.port);

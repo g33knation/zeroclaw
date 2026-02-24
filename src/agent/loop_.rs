@@ -239,7 +239,12 @@ async fn auto_compact_history(
 /// Build context preamble by searching memory for relevant entries.
 /// Entries with a hybrid score below `min_relevance_score` are dropped to
 /// prevent unrelated memories from bleeding into the conversation.
-async fn build_context(mem: &dyn Memory, user_msg: &str, min_relevance_score: f64) -> String {
+async fn build_context(
+    mem: &dyn Memory,
+    codebase_rag: Option<&crate::rag::codebase::CodebaseRag>,
+    user_msg: &str,
+    min_relevance_score: f64,
+) -> String {
     let mut context = String::new();
 
     // Pull relevant memories for this message
@@ -262,8 +267,17 @@ async fn build_context(mem: &dyn Memory, user_msg: &str, min_relevance_score: f6
             }
             if context == "[Memory context]\n" {
                 context.clear();
-            } else {
-                context.push('\n');
+            }
+        }
+    }
+
+    if let Some(rag) = codebase_rag {
+        if let Ok(entries) = rag.retrieve(user_msg, 3).await {
+            if !entries.is_empty() {
+                context.push_str("[Codebase context]\n");
+                for entry in entries {
+                    let _ = writeln!(context, "--- {} ---\n{}\n", entry.key, entry.content);
+                }
             }
         }
     }
@@ -1462,7 +1476,7 @@ fn parse_tool_calls(response: &str) -> (String, Vec<ParsedToolCall>) {
     if calls.is_empty() {
         static MD_TOOL_CALL_RE: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(
-                r"(?s)```(?:tool[_-]?call|invoke)\s*\n(.*?)(?:```|</tool[_-]?call>|</toolcall>|</invoke>|</minimax:toolcall>)",
+                r"(?s)```(?:tool[_-]?call|invoke|json)\s*\n(.*?)(?:```|</tool[_-]?call>|</toolcall>|</invoke>|</minimax:toolcall>)",
             )
             .unwrap()
         });
@@ -1618,6 +1632,18 @@ fn parse_tool_calls(response: &str) -> (String, Vec<ParsedToolCall>) {
     // 3. Markdown code blocks with tool_call/toolcall/tool-call language
     // 4. Explicit GLM line-based call formats (e.g. `shell/command>...`)
     // This ensures only the LLM's intentional tool calls are executed.
+
+    // Remaining text after last tool call
+    // Final fallthrough: extraction from any JSON blocks if still nothing found
+    if calls.is_empty() {
+        let extracted = extract_json_values(remaining);
+        for value in extracted {
+            let parsed_calls = parse_tool_calls_from_json_value(&value);
+            if !parsed_calls.is_empty() {
+                calls.extend(parsed_calls);
+            }
+        }
+    }
 
     // Remaining text after last tool call
     if !remaining.trim().is_empty() {
@@ -2651,6 +2677,16 @@ pub async fn run(
     )?);
     tracing::info!(backend = mem.name(), "Memory initialized");
 
+    let codebase_rag = if config.memory.codebase_rag_enabled {
+        let rag = crate::rag::codebase::CodebaseRag::new(mem.clone(), config.workspace_dir.clone());
+        if let Ok(0) = mem.count().await {
+            let _ = rag.index_all().await;
+        }
+        Some(rag)
+    } else {
+        None
+    };
+
     // ── Peripherals (merge peripheral tools into registry) ─
     if !peripheral_overrides.is_empty() {
         tracing::info!(
@@ -2898,8 +2934,13 @@ pub async fn run(
         }
 
         // Inject memory + hardware RAG context into user message
-        let mem_context =
-            build_context(mem.as_ref(), &msg, config.memory.min_relevance_score).await;
+        let mem_context = build_context(
+            mem.as_ref(),
+            codebase_rag.as_ref(),
+            &msg,
+            config.memory.min_relevance_score,
+        )
+        .await;
         let rag_limit = if config.agent.compact_context { 2 } else { 5 };
         let hw_context = hardware_rag
             .as_ref()
@@ -3022,8 +3063,13 @@ pub async fn run(
             }
 
             // Inject memory + hardware RAG context into user message
-            let mem_context =
-                build_context(mem.as_ref(), &user_input, config.memory.min_relevance_score).await;
+            let mem_context = build_context(
+                mem.as_ref(),
+                codebase_rag.as_ref(),
+                &user_input,
+                config.memory.min_relevance_score,
+            )
+            .await;
             let rag_limit = if config.agent.compact_context { 2 } else { 5 };
             let hw_context = hardware_rag
                 .as_ref()
@@ -3186,6 +3232,16 @@ pub async fn process_message(config: Config, message: &str) -> Result<String> {
         .map(|b| b.board.clone())
         .collect();
 
+    let codebase_rag = if config.memory.codebase_rag_enabled {
+        let rag = crate::rag::codebase::CodebaseRag::new(mem.clone(), config.workspace_dir.clone());
+        if let Ok(0) = mem.count().await {
+            let _ = rag.index_all().await;
+        }
+        Some(rag)
+    } else {
+        None
+    };
+
     let skills = crate::skills::load_skills_with_config(&config.workspace_dir, &config);
     let mut tool_descs: Vec<(&str, &str)> = vec![
         ("shell", "Execute terminal commands."),
@@ -3254,7 +3310,13 @@ pub async fn process_message(config: Config, message: &str) -> Result<String> {
         system_prompt.push_str(&build_tool_instructions(&tools_registry));
     }
 
-    let mem_context = build_context(mem.as_ref(), message, config.memory.min_relevance_score).await;
+    let mem_context = build_context(
+        mem.as_ref(),
+        codebase_rag.as_ref(),
+        message,
+        config.memory.min_relevance_score,
+    )
+    .await;
     let rag_limit = if config.agent.compact_context { 2 } else { 5 };
     let hw_context = hardware_rag
         .as_ref()
@@ -4520,7 +4582,7 @@ Tail"#;
         .await
         .unwrap();
 
-        let context = build_context(&mem, "status updates", 0.0).await;
+        let context = build_context(&mem, None, "status updates", 0.0).await;
         assert!(context.contains("user_msg_real"));
         assert!(!context.contains("assistant_resp_poisoned"));
         assert!(!context.contains("fabricated event"));

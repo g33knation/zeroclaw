@@ -1675,6 +1675,9 @@ pub struct MemoryConfig {
     /// None = wait indefinitely (default). Recommended max: 300.
     #[serde(default)]
     pub sqlite_open_timeout_secs: Option<u64>,
+    /// Enable codebase-aware RAG system (indexing and semantic search).
+    #[serde(default)]
+    pub codebase_rag_enabled: bool,
 }
 
 fn default_embedding_provider() -> String {
@@ -1743,7 +1746,8 @@ impl Default for MemoryConfig {
             snapshot_enabled: false,
             snapshot_on_hygiene: false,
             auto_hydrate: true,
-            sqlite_open_timeout_secs: None,
+            sqlite_open_timeout_secs: Some(5),
+            codebase_rag_enabled: false,
         }
     }
 }
